@@ -25,6 +25,7 @@ import AccessibleButton from '../elements/AccessibleButton';
 import VideoView from "./VideoView";
 import RoomAvatar from "../avatars/RoomAvatar";
 import PulsedAvatar from '../avatars/PulsedAvatar';
+import OpenViduCallView from "./OpenViduCallView.js";
 
 interface IProps {
         // js-sdk room object. If set, we will only show calls for the given

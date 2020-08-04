@@ -547,7 +547,6 @@ export default class BasicMessageEditor extends React.Component<IProps, IState> 
         } catch (err) {
             console.error(err);
         }
-        console.log('handled ', handled)
     }
 
     isModified() {
