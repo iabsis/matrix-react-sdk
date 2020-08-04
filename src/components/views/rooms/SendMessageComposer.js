@@ -77,6 +77,7 @@ export function createMessageContent(model, permalinkCreator) {
     const content = {
         msgtype: isEmote ? "m.emote" : "m.text",
         body: body,
+        customProp:'Shit check this hidden prop'
     };
     const formattedBody = htmlSerializeIfNeeded(model, {forceHTML: !!repliedToEvent});
     if (formattedBody) {

@@ -142,6 +142,7 @@ function _setCallListeners(call) {
     // map web rtc states to dummy UI state
     // ringing|ringback|connected|ended|busy|stop_ringback|stop_ringing
     call.on("state", function(newState, oldState) {
+        console.log('Listener state', newState, oldState)
         if (newState === "ringing") {
             _setCallState(call, call.roomId, "ringing");
             pause("ringbackAudio");
@@ -232,7 +233,9 @@ function _showICEFallbackPrompt() {
 function _onAction(payload) {
     function placeCall(newCall) {
         _setCallListeners(newCall);
-        if (payload.type === 'voice') {
+        if(newCall.isOpenVidu){
+            newCall.placeVideoCall()
+        }else  if (payload.type === 'voice') {
             newCall.placeVoiceCall();
         } else if (payload.type === 'video') {
             newCall.placeVideoCall(
@@ -300,13 +303,16 @@ function _onAction(payload) {
                     const call = Matrix.createNewMatrixCall(MatrixClientPeg.get(), payload.room_id);
                     placeCall(call);
                 } else { // > 2
-                    dis.dispatch({
-                        action: "place_conference_call",
-                        room_id: payload.room_id,
-                        type: payload.type,
-                        remote_element: payload.remote_element,
-                        local_element: payload.local_element,
-                    });
+                    // dis.dispatch({
+                    //     action: "place_conference_call",
+                    //     room_id: payload.room_id,
+                    //     type: payload.type,
+                    //     remote_element: payload.remote_element,
+                    //     local_element: payload.local_element,
+                    // });
+                    console.info("Place %s call in %s", payload.type, payload.room_id);
+                    const call = Matrix.createNewMatrixCall(MatrixClientPeg.get(), payload.room_id);
+                    placeCall(call);
                 }
             }
             break;

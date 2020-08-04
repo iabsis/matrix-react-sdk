@@ -110,7 +110,7 @@ export default createReactClass({
     }, 500),
 
     _computeCounters: function() {
-        let counters = [];
+        const counters = [];
 
         if (this.props.room && SettingsStore.isFeatureEnabled("feature_state_counters")) {
             const stateEvs = this.props.room.currentState.getStateEvents('re.jki.counter');
@@ -133,8 +133,8 @@ export default createReactClass({
                         "value": value,
                         "link": link,
                         "severity": severity,
-                        "stateKey": stateKey
-                    })
+                        "stateKey": stateKey,
+                    });
                 }
             });
         }
@@ -207,7 +207,7 @@ export default createReactClass({
 
         let stateViews = null;
         if (this.state.counters && SettingsStore.isFeatureEnabled("feature_state_counters")) {
-            let counters = [];
+            const counters = [];
 
             this.state.counters.forEach((counter, idx) => {
                 const title = counter.title;
@@ -216,7 +216,7 @@ export default createReactClass({
                 const severity = counter.severity;
                 const stateKey = counter.stateKey;
 
-                let span = <span>{ title }: { value }</span>
+                let span = <span>{ title }: { value }</span>;
 
                 if (link) {
                     span = (
@@ -241,7 +241,7 @@ export default createReactClass({
                     <span
                         className="m_RoomView_auxPanel_stateViews_delim"
                         key={"delim" + idx}
-                    > ─ </span>
+                    > ─ </span>,
                 );
             });
 

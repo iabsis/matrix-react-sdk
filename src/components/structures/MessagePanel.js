@@ -352,6 +352,7 @@ export default class MessagePanel extends React.Component {
 
     // TODO: Implement granular (per-room) hide options
     _shouldShowEvent(mxEv) {
+        // console.log('event ,,,,,,', mxEv)
         if (mxEv.sender && MatrixClientPeg.get().isUserIgnored(mxEv.sender.userId)) {
             return false; // ignored = no show (only happens if the ignore happens after an event was received)
         }
