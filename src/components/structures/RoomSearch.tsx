@@ -20,7 +20,6 @@ import classNames from "classnames";
 import defaultDispatcher from "../../dispatcher/dispatcher";
 import { _t } from "../../languageHandler";
 import { ActionPayload } from "../../dispatcher/payloads";
-import { throttle } from 'lodash';
 import { Key } from "../../Keyboard";
 import AccessibleButton from "../views/elements/AccessibleButton";
 import { Action } from "../../dispatcher/actions";
@@ -126,7 +125,8 @@ export default class RoomSearch extends React.PureComponent<IProps, IState> {
     public render(): React.ReactNode {
         const classes = classNames({
             'mx_RoomSearch': true,
-            'mx_RoomSearch_expanded': this.state.query || this.state.focused,
+            'mx_RoomSearch_hasQuery': this.state.query,
+            'mx_RoomSearch_focused': this.state.focused,
             'mx_RoomSearch_minimized': this.props.isMinimized,
         });
 
@@ -136,7 +136,7 @@ export default class RoomSearch extends React.PureComponent<IProps, IState> {
         });
 
         let icon = (
-            <div className='mx_RoomSearch_icon'/>
+            <div className='mx_RoomSearch_icon' />
         );
         let input = (
             <input
@@ -148,7 +148,7 @@ export default class RoomSearch extends React.PureComponent<IProps, IState> {
                 onBlur={this.onBlur}
                 onChange={this.onChange}
                 onKeyDown={this.onKeyDown}
-                placeholder={_t("Search")}
+                placeholder={_t("Filter")}
                 autoComplete="off"
             />
         );
@@ -164,8 +164,8 @@ export default class RoomSearch extends React.PureComponent<IProps, IState> {
         if (this.props.isMinimized) {
             icon = (
                 <AccessibleButton
-                    title={_t("Search rooms")}
-                    className="mx_RoomSearch_icon"
+                    title={_t("Filter rooms and people")}
+                    className="mx_RoomSearch_icon mx_RoomSearch_minimizedHandle"
                     onClick={this.openSearch}
                 />
             );

@@ -59,10 +59,6 @@ limitations under the License.
                 width: calc(100% - 22px);
             }
 
-            &.mx_RoomSublist_headerContainer_stickyBottom {
-                bottom: 0;
-            }
-
             // We don't have a top style because the top is dependent on the room list header's
             // height, and is therefore calculated in JS.
             // The class, mx_RoomSublist_headerContainer_stickyTop, is applied though.
@@ -120,7 +116,7 @@ limitations under the License.
         }
 
         .mx_RoomSublist_auxButton::before {
-            mask-image: url('$(res)/img/feather-customised/plus.svg');
+            mask-image: url('$(res)/img/element-icons/roomlist/plus.svg');
         }
 
         .mx_RoomSublist_menuButton::before {
@@ -169,7 +165,7 @@ limitations under the License.
     // that the sublists below them do not jump. However, that leaves a gap
     // when scrolled to the top above the first sublist (whose header can only
     // ever stick to top), so we force height to 0 for only that first header.
-    // See also https://github.com/vector-im/riot-web/issues/14429.
+    // See also https://github.com/vector-im/element-web/issues/14429.
     &:first-child .mx_RoomSublist_headerContainer {
         height: 0;
         padding-bottom: 4px;
@@ -386,4 +382,23 @@ limitations under the License.
 
 .mx_RoomSublist_addRoomTooltip {
     margin-top: -3px;
+}
+
+.mx_RoomSublist_skeletonUI {
+    position: relative;
+    margin-left: 4px;
+    height: 288px;
+
+    &::before {
+        background: $roomsublist-skeleton-ui-bg;
+
+        width: 100%;
+        height: 100%;
+
+        content: '';
+        position: absolute;
+        mask-repeat: repeat-y;
+        mask-size: auto 48px;
+        mask-image: url('$(res)/img/element-icons/roomlist/skeleton-ui.svg');
+    }
 }

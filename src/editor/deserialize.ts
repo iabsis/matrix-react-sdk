@@ -21,6 +21,7 @@ import { walkDOMDepthFirst } from "./dom";
 import { checkBlockNode } from "../HtmlUtils";
 import { getPrimaryPermalinkEntity } from "../utils/permalinks/Permalinks";
 import { PartCreator } from "./parts";
+import SdkConfig from "../SdkConfig";
 
 function parseAtRoomMentions(text: string, partCreator: PartCreator) {
     const ATROOM = "@room";
@@ -130,6 +131,23 @@ function parseElement(n: HTMLElement, partCreator: PartCreator, lastNode: HTMLEl
             }
             break;
         }
+        case "DIV":
+        case "SPAN": {
+            // math nodes are translated back into delimited latex strings
+            if (n.hasAttribute("data-mx-maths")) {
+                const delimLeft = (n.nodeName == "SPAN") ?
+                    (SdkConfig.get()['latex_maths_delims'] || {})['inline_left'] || "$" :
+                    (SdkConfig.get()['latex_maths_delims'] || {})['display_left'] || "$$";
+                const delimRight = (n.nodeName == "SPAN") ?
+                    (SdkConfig.get()['latex_maths_delims'] || {})['inline_right'] || "$" :
+                    (SdkConfig.get()['latex_maths_delims'] || {})['display_right'] || "$$";
+                const tex = n.getAttribute("data-mx-maths");
+                return partCreator.plain(delimLeft + tex + delimRight);
+            } else if (!checkDescendInto(n)) {
+                return partCreator.plain(n.textContent);
+            }
+            break;
+        }
         case "OL":
             state.listIndex.push((<HTMLOListElement>n).start || 1);
             /* falls through */
@@ -158,7 +176,7 @@ function checkDescendInto(node) {
 
 function checkIgnored(n) {
     if (n.nodeType === Node.TEXT_NODE) {
-        // riot adds \n text nodes in a lot of places,
+        // Element adds \n text nodes in a lot of places,
         // which should be ignored
         return n.nodeValue === "\n";
     } else if (n.nodeType === Node.ELEMENT_NODE) {

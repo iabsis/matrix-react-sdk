@@ -24,7 +24,7 @@ import {PushProcessor} from "matrix-js-sdk/src/pushprocessor";
 
 // .m.rule.master being enabled means all events match that push rule
 // default action on this rule is dont_notify, but it could be something else
-function isPushNotifyDisabled(): boolean {
+export function isPushNotifyDisabled(): boolean {
     // Return the value of the master push rule as a default
     const processor = new PushProcessor(MatrixClientPeg.get());
     const masterRule = processor.getPushRuleById(".m.rule.master");
@@ -76,15 +76,6 @@ export class NotificationBodyEnabledController extends SettingController {
             return !isPushNotifyDisabled();
         }
 
-        return calculatedValue;
-    }
-}
-
-export class AudioNotificationsEnabledController extends SettingController {
-    public getValueOverride(level: SettingLevel, roomId: string, calculatedValue: any): any {
-        if (!getNotifier().isPossible()) return false;
-
-        // Note: Audio notifications are *not* enabled by default.
         return calculatedValue;
     }
 }

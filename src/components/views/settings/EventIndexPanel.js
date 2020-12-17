@@ -129,11 +129,16 @@ export default class EventIndexPanel extends React.Component {
             eventIndexingSettings = (
                 <div>
                     <div className='mx_SettingsTab_subsectionText'>
-                        {_t( "Securely cache encrypted messages locally for them " +
-                             "to appear in search results, using ")
-                        } {formatBytes(this.state.eventIndexSize, 0)}
-                        {_t( " to store messages from ")}
-                        {formatCountLong(this.state.roomCount)} {_t("rooms.")}
+                        {_t("Securely cache encrypted messages locally for them " +
+                            "to appear in search results, using %(size)s to store messages from %(rooms)s rooms.",
+                            {
+                                size: formatBytes(this.state.eventIndexSize, 0),
+                                // This drives the singular / plural string
+                                // selection for "room" / "rooms" only.
+                                count: this.state.roomCount,
+                                rooms: formatCountLong(this.state.roomCount),
+                            },
+                        )}
                     </div>
                     <div>
                         <AccessibleButton kind="primary" onClick={this._onManage}>
@@ -160,7 +165,7 @@ export default class EventIndexPanel extends React.Component {
             );
         } else if (EventIndexPeg.platformHasSupport() && !EventIndexPeg.supportIsInstalled()) {
             const nativeLink = (
-                "https://github.com/vector-im/riot-web/blob/develop/" +
+                "https://github.com/vector-im/element-web/blob/develop/" +
                 "docs/native-node-modules.md#" +
                 "adding-seshat-for-search-in-e2e-encrypted-rooms"
             );
@@ -194,7 +199,7 @@ export default class EventIndexPanel extends React.Component {
                                 brand,
                             },
                             {
-                                'desktopLink': (sub) => <a href="https://riot.im/download/desktop"
+                                'desktopLink': (sub) => <a href="https://element.io/get-started"
                                     target="_blank" rel="noreferrer noopener">{sub}</a>,
                             },
                         )

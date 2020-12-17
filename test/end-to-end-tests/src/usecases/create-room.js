@@ -39,6 +39,9 @@ async function createRoom(session, roomName, encrypted=false) {
     const addRoomButton = await roomsSublist.$(".mx_RoomSublist_auxButton");
     await addRoomButton.click();
 
+    const createRoomButton = await session.query('.mx_AccessibleButton[aria-label="Create new room"]');
+    await createRoomButton.click();
+
     const roomNameInput = await session.query('.mx_CreateRoomDialog_name input');
     await session.replaceInputText(roomNameInput, roomName);
 
@@ -61,7 +64,7 @@ async function createDm(session, invitees) {
     const startChatButton = await dmsSublist.$(".mx_RoomSublist_auxButton");
     await startChatButton.click();
 
-    const inviteesEditor = await session.query('.mx_InviteDialog_editor textarea');
+    const inviteesEditor = await session.query('.mx_InviteDialog_editor input');
     for (const target of invitees) {
         await session.replaceInputText(inviteesEditor, target);
         await session.delay(1000); // give it a moment to figure out a suggestion
