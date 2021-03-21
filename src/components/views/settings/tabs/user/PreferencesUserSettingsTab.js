@@ -23,7 +23,9 @@ import Field from "../../../elements/Field";
 import * as sdk from "../../../../..";
 import PlatformPeg from "../../../../../PlatformPeg";
 import {SettingLevel} from "../../../../../settings/SettingLevel";
+import {replaceableComponent} from "../../../../../utils/replaceableComponent";
 
+@replaceableComponent("views.settings.tabs.user.PreferencesUserSettingsTab")
 export default class PreferencesUserSettingsTab extends React.Component {
     static ROOM_LIST_SETTINGS = [
         'breadcrumbs',
@@ -34,6 +36,7 @@ export default class PreferencesUserSettingsTab extends React.Component {
         'MessageComposerInput.suggestEmoji',
         'sendTypingNotifications',
         'MessageComposerInput.ctrlEnterToSend',
+        'MessageComposerInput.showStickersButton',
     ];
 
     static TIMELINE_SETTINGS = [
@@ -46,12 +49,16 @@ export default class PreferencesUserSettingsTab extends React.Component {
         'alwaysShowTimestamps',
         'showRedactions',
         'enableSyntaxHighlightLanguageDetection',
+        'expandCodeByDefault',
+        'scrollToBottomOnMessageSent',
+        'showCodeLineNumbers',
         'showJoinLeaves',
         'showAvatarChanges',
         'showDisplaynameChanges',
         'showImages',
         'showChatEffects',
         'Pill.shouldShowPillAvatar',
+        'ctrlFForSearch',
     ];
 
     static GENERAL_SETTINGS = [

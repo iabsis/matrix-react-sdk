@@ -36,6 +36,9 @@ import {Analytics} from "../Analytics";
 import CountlyAnalytics from "../CountlyAnalytics";
 import UserActivity from "../UserActivity";
 import {ModalWidgetStore} from "../stores/ModalWidgetStore";
+import { WidgetLayoutStore } from "../stores/widgets/WidgetLayoutStore";
+import VoipUserMapper from "../VoipUserMapper";
+import {SpaceStoreClass} from "../stores/SpaceStore";
 
 declare global {
     interface Window {
@@ -59,11 +62,14 @@ declare global {
         mxNotifier: typeof Notifier;
         mxRightPanelStore: RightPanelStore;
         mxWidgetStore: WidgetStore;
+        mxWidgetLayoutStore: WidgetLayoutStore;
         mxCallHandler: CallHandler;
         mxAnalytics: Analytics;
         mxCountlyAnalytics: typeof CountlyAnalytics;
         mxUserActivity: UserActivity;
         mxModalWidgetStore: ModalWidgetStore;
+        mxVoipUserMapper: VoipUserMapper;
+        mxSpaceStore: SpaceStoreClass;
     }
 
     interface Document {

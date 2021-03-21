@@ -26,12 +26,14 @@ import * as sdk from '../../index';
 
 import {MatrixClientPeg} from '../../MatrixClientPeg';
 import SettingsStore from '../../settings/SettingsStore';
+import {Layout, LayoutPropType} from "../../settings/Layout";
 import {_t} from "../../languageHandler";
 import {haveTileForEvent} from "../views/rooms/EventTile";
 import {textForEvent} from "../../TextForEvent";
 import IRCTimelineProfileResizer from "../views/elements/IRCTimelineProfileResizer";
 import DMRoomMap from "../../utils/DMRoomMap";
 import NewRoomIntro from "../views/rooms/NewRoomIntro";
+import {replaceableComponent} from "../../utils/replaceableComponent";
 
 const CONTINUATION_MAX_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const continuedTypes = ['m.sticker', 'm.room.message'];
@@ -64,6 +66,7 @@ const isMembershipChange = (e) => e.getType() === 'm.room.member' || e.getType()
 
 /* (almost) stateless UI component which builds the event tiles in the room timeline.
  */
+@replaceableComponent("structures.MessagePanel")
 export default class MessagePanel extends React.Component {
     static propTypes = {
         // true to give the component a 'display: none' style.
@@ -135,14 +138,13 @@ export default class MessagePanel extends React.Component {
         // whether to show reactions for an event
         showReactions: PropTypes.bool,
 
-        // whether to use the irc layout
-        useIRCLayout: PropTypes.bool,
+        // which layout to use
+        layout: LayoutPropType,
 
         // whether or not to show flair at all
         enableFlair: PropTypes.bool,
     };
 
-    // Force props to be loaded for useIRCLayout
     constructor(props) {
         super(props);
 
@@ -487,6 +489,9 @@ export default class MessagePanel extends React.Component {
 
         let prevEvent = null; // the last event we showed
 
+        // Note: the EventTile might still render a "sent/sending receipt" independent of
+        // this information. When not providing read receipt information, the tile is likely
+        // to assume that sent receipts are to be shown more often.
         this._readReceiptsByEvent = {};
         if (this.props.showReadReceipts) {
             this._readReceiptsByEvent = this._getReadReceiptsByShownEvent();
@@ -523,10 +528,17 @@ export default class MessagePanel extends React.Component {
                     const nextEvent = i < this.props.events.length - 1
                         ? this.props.events[i + 1]
                         : null;
+
+                    // The next event with tile is used to to determine the 'last successful' flag
+                    // when rendering the tile. The shouldShowEvent function is pretty quick at what
+                    // it does, so this should have no significant cost even when a room is used for
+                    // not-chat purposes.
+                    const nextTile = this.props.events.slice(i + 1).find(e => this._shouldShowEvent(e));
+
                     // make sure we unpack the array returned by _getTilesForEvent,
                     // otherwise react will auto-generate keys and we will end up
                     // replacing all of the DOM elements every time we paginate.
-                    ret.push(...this._getTilesForEvent(prevEvent, mxEv, last, nextEvent));
+                    ret.push(...this._getTilesForEvent(prevEvent, mxEv, last, nextEvent, nextTile));
                     prevEvent = mxEv;
                 }
 
@@ -542,7 +554,7 @@ export default class MessagePanel extends React.Component {
         return ret;
     }
 
-    _getTilesForEvent(prevEvent, mxEv, last, nextEvent) {
+    _getTilesForEvent(prevEvent, mxEv, last, nextEvent, nextEventWithTile) {
         const TileErrorBoundary = sdk.getComponent('messages.TileErrorBoundary');
         const EventTile = sdk.getComponent('rooms.EventTile');
         const DateSeparator = sdk.getComponent('messages.DateSeparator');
@@ -584,6 +596,30 @@ export default class MessagePanel extends React.Component {
 
         const readReceipts = this._readReceiptsByEvent[eventId];
 
+        let isLastSuccessful = false;
+        const isSentState = s => !s || s === 'sent';
+        const isSent = isSentState(mxEv.getAssociatedStatus());
+        const hasNextEvent = nextEvent && this._shouldShowEvent(nextEvent);
+        if (!hasNextEvent && isSent) {
+            isLastSuccessful = true;
+        } else if (hasNextEvent && isSent && !isSentState(nextEvent.getAssociatedStatus())) {
+            isLastSuccessful = true;
+        }
+
+        // This is a bit nuanced, but if our next event is hidden but a future event is not
+        // hidden then we're not the last successful.
+        if (
+            nextEventWithTile &&
+            nextEventWithTile !== nextEvent &&
+            isSentState(nextEventWithTile.getAssociatedStatus())
+        ) {
+            isLastSuccessful = false;
+        }
+
+        // We only want to consider "last successful" if the event is sent by us, otherwise of course
+        // it's successful: we received it.
+        isLastSuccessful = isLastSuccessful && mxEv.getSender() === MatrixClientPeg.get().getUserId();
+
         // use txnId as key if available so that we don't remount during sending
         ret.push(
             <li
@@ -609,10 +645,11 @@ export default class MessagePanel extends React.Component {
                         permalinkCreator={this.props.permalinkCreator}
                         last={last}
                         lastInSection={willWantDateSeparator}
+                        lastSuccessful={isLastSuccessful}
                         isSelectedEvent={highlight}
                         getRelationsForEvent={this.props.getRelationsForEvent}
                         showReactions={this.props.showReactions}
-                        useIRCLayout={this.props.useIRCLayout}
+                        layout={this.props.layout}
                         enableFlair={this.props.enableFlair}
                     />
                 </TileErrorBoundary>
@@ -810,7 +847,7 @@ export default class MessagePanel extends React.Component {
         }
 
         let ircResizer = null;
-        if (this.props.useIRCLayout) {
+        if (this.props.layout == Layout.IRC) {
             ircResizer = <IRCTimelineProfileResizer
                 minWidth={20}
                 maxWidth={600}
@@ -990,6 +1027,97 @@ class CreationGrouper {
     }
 }
 
+class RedactionGrouper {
+    static canStartGroup = function(panel, ev) {
+        return panel._shouldShowEvent(ev) && ev.isRedacted();
+    }
+
+    constructor(panel, ev, prevEvent, lastShownEvent) {
+        this.panel = panel;
+        this.readMarker = panel._readMarkerForEvent(
+            ev.getId(),
+            ev === lastShownEvent,
+        );
+        this.events = [ev];
+        this.prevEvent = prevEvent;
+        this.lastShownEvent = lastShownEvent;
+    }
+
+    shouldGroup(ev) {
+        if (this.panel._wantsDateSeparator(this.events[0], ev.getDate())) {
+            return false;
+        }
+        return ev.isRedacted();
+    }
+
+    add(ev) {
+        this.readMarker = this.readMarker || this.panel._readMarkerForEvent(
+            ev.getId(),
+            ev === this.lastShownEvent,
+        );
+        this.events.push(ev);
+    }
+
+    getTiles() {
+        if (!this.events || !this.events.length) return [];
+
+        const DateSeparator = sdk.getComponent('messages.DateSeparator');
+        const EventListSummary = sdk.getComponent('views.elements.EventListSummary');
+
+        const panel = this.panel;
+        const ret = [];
+        const lastShownEvent = this.lastShownEvent;
+
+        if (panel._wantsDateSeparator(this.prevEvent, this.events[0].getDate())) {
+            const ts = this.events[0].getTs();
+            ret.push(
+                <li key={ts+'~'}><DateSeparator key={ts+'~'} ts={ts} /></li>,
+            );
+        }
+
+        const key = "redactioneventlistsummary-" + (
+            this.prevEvent ? this.events[0].getId() : "initial"
+        );
+
+        const senders = new Set();
+        let eventTiles = this.events.map((e) => {
+            senders.add(e.sender);
+            // In order to prevent DateSeparators from appearing in the expanded form,
+            // render each member event as if the previous one was itself.
+            // This way, the timestamp of the previous event === the
+            // timestamp of the current event, and no DateSeparator is inserted.
+            return panel._getTilesForEvent(e, e, e === lastShownEvent);
+        }).reduce((a, b) => a.concat(b), []);
+
+        if (eventTiles.length === 0) {
+            eventTiles = null;
+        }
+
+        ret.push(
+            <EventListSummary
+                key={key}
+                threshold={2}
+                events={this.events}
+                onToggle={panel._onHeightChanged} // Update scroll state
+                summaryMembers={Array.from(senders)}
+                summaryText={_t("%(count)s messages deleted.", { count: eventTiles.length })}
+            >
+                { eventTiles }
+            </EventListSummary>,
+        );
+
+        if (this.readMarker) {
+            ret.push(this.readMarker);
+        }
+
+        return ret;
+    }
+
+    getNewPrevEvent() {
+        return this.events[0];
+    }
+}
+
 // Wrap consecutive member events in a ListSummary, ignore if redacted
 class MemberGrouper {
     static canStartGroup = function(panel, ev) {
@@ -1100,4 +1228,4 @@ class MemberGrouper {
 }
 
 // all the grouper classes that we use
-const groupers = [CreationGrouper, MemberGrouper];
+const groupers = [CreationGrouper, MemberGrouper, RedactionGrouper];

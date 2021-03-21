@@ -16,9 +16,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import * as React from "react";
+import React, { ReactComponentElement } from "react";
 import { Dispatcher } from "flux";
 import { Room } from "matrix-js-sdk/src/models/room";
+import * as fbEmitter from "fbemitter";
 
 import { _t, _td } from "../../../languageHandler";
 import { RovingTabIndexProvider } from "../../../accessibility/RovingTabIndex";
@@ -33,7 +34,7 @@ import RoomSublist from "./RoomSublist";
 import { ActionPayload } from "../../../dispatcher/payloads";
 import { MatrixClientPeg } from "../../../MatrixClientPeg";
 import GroupAvatar from "../avatars/GroupAvatar";
-import TemporaryTile from "./TemporaryTile";
+import ExtraTile from "./ExtraTile";
 import { StaticNotificationState } from "../../../stores/notifications/StaticNotificationState";
 import { NotificationColor } from "../../../stores/notifications/NotificationColor";
 import { Action } from "../../../dispatcher/actions";
@@ -46,6 +47,13 @@ import { objectShallowClone, objectWithOnly } from "../../../utils/objects";
 import { IconizedContextMenuOption, IconizedContextMenuOptionList } from "../context_menus/IconizedContextMenu";
 import AccessibleButton from "../elements/AccessibleButton";
 import { CommunityPrototypeStore } from "../../../stores/CommunityPrototypeStore";
+import CallHandler from "../../../CallHandler";
+import SpaceStore, { SUGGESTED_ROOMS } from "../../../stores/SpaceStore";
+import { showAddExistingRooms, showCreateNewRoom } from "../../../utils/space";
+import { EventType } from "matrix-js-sdk/src/@types/event";
+import {replaceableComponent} from "../../../utils/replaceableComponent";
+import RoomAvatar from "../avatars/RoomAvatar";
+import { ISpaceSummaryRoom } from "../../structures/SpaceRoomDirectory";
 
 interface IProps {
     onKeyDown: (ev: React.KeyboardEvent) => void;
@@ -59,6 +67,8 @@ interface IProps {
 interface IState {
     sublists: ITagMap;
     isNameFiltering: boolean;
+    currentRoomId?: string;
+    suggestedRooms: ISpaceSummaryRoom[];
 }
 
 const TAG_ORDER: TagID[] = [
@@ -71,6 +81,7 @@ const TAG_ORDER: TagID[] = [
 
     DefaultTagID.LowPriority,
     DefaultTagID.ServerNotice,
+    DefaultTagID.Suggested,
     DefaultTagID.Archived,
 ];
 const CUSTOM_TAGS_BEFORE_TAG = DefaultTagID.LowPriority;
@@ -89,10 +100,44 @@ interface ITagAesthetics {
     defaultHidden: boolean;
 }
 
-const TAG_AESTHETICS: {
+interface ITagAestheticsMap {
     // @ts-ignore - TS wants this to be a string but we know better
     [tagId: TagID]: ITagAesthetics;
-} = {
+}
+
+// If we have no dialer support, we just show the create chat dialog
+const dmOnAddRoom = (dispatcher?: Dispatcher<ActionPayload>) => {
+    (dispatcher || defaultDispatcher).dispatch({action: 'view_create_chat'});
+};
+
+// If we have dialer support, show a context menu so the user can pick between
+// the dialer and the create chat dialog
+const dmAddRoomContextMenu = (onFinished: () => void) => {
+    return <IconizedContextMenuOptionList first>
+        <IconizedContextMenuOption
+            label={_t("Start a Conversation")}
+            iconClassName="mx_RoomList_iconPlus"
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onFinished();
+                defaultDispatcher.dispatch({action: "view_create_chat"});
+            }}
+        />
+        <IconizedContextMenuOption
+            label={_t("Open dial pad")}
+            iconClassName="mx_RoomList_iconDialpad"
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onFinished();
+                defaultDispatcher.fire(Action.OpenDialPad);
+            }}
+        />
+    </IconizedContextMenuOptionList>;
+};
+
+const TAG_AESTHETICS: ITagAestheticsMap = {
     [DefaultTagID.Invite]: {
         sectionLabel: _td("Invites"),
         isInvite: true,
@@ -108,9 +153,8 @@ const TAG_AESTHETICS: {
         isInvite: false,
         defaultHidden: false,
         addRoomLabel: _td("Start chat"),
-        onAddRoom: (dispatcher?: Dispatcher<ActionPayload>) => {
-            (dispatcher || defaultDispatcher).dispatch({action: 'view_create_chat'});
-        },
+        // Either onAddRoom or addRoomContextMenu are set depending on whether we
+        // have dialer support.
     },
     [DefaultTagID.Untagged]: {
         sectionLabel: _td("Rooms"),
@@ -118,6 +162,50 @@ const TAG_AESTHETICS: {
         defaultHidden: false,
         addRoomLabel: _td("Add room"),
         addRoomContextMenu: (onFinished: () => void) => {
+            if (SpaceStore.instance.activeSpace) {
+                const canAddRooms = SpaceStore.instance.activeSpace.currentState.maySendStateEvent(EventType.SpaceChild,
+                    MatrixClientPeg.get().getUserId());
+
+                return <IconizedContextMenuOptionList first>
+                    <IconizedContextMenuOption
+                        label={_t("Create new room")}
+                        iconClassName="mx_RoomList_iconPlus"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onFinished();
+                            showCreateNewRoom(MatrixClientPeg.get(), SpaceStore.instance.activeSpace);
+                        }}
+                        disabled={!canAddRooms}
+                        tooltip={canAddRooms ? undefined
+                            : _t("You do not have permissions to create new rooms in this space")}
+                    />
+                    <IconizedContextMenuOption
+                        label={_t("Add existing room")}
+                        iconClassName="mx_RoomList_iconHash"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onFinished();
+                            showAddExistingRooms(MatrixClientPeg.get(), SpaceStore.instance.activeSpace);
+                        }}
+                        disabled={!canAddRooms}
+                        tooltip={canAddRooms ? undefined
+                            : _t("You do not have permissions to add rooms to this space")}
+                    />
+                    <IconizedContextMenuOption
+                        label={_t("Explore space rooms")}
+                        iconClassName="mx_RoomList_iconExplore"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onFinished();
+                            defaultDispatcher.fire(Action.ViewRoomDirectory);
+                        }}
+                    />
+                </IconizedContextMenuOptionList>;
+            }
+
             return <IconizedContextMenuOptionList first>
                 <IconizedContextMenuOption
                     label={_t("Create new room")}
@@ -161,6 +249,12 @@ const TAG_AESTHETICS: {
         isInvite: false,
         defaultHidden: true,
     },
+
+    [DefaultTagID.Suggested]: {
+        sectionLabel: _td("Suggested Rooms"),
+        isInvite: false,
+        defaultHidden: false,
+    },
 };
 
 function customTagAesthetics(tagId: TagID): ITagAesthetics {
@@ -175,9 +269,12 @@ function customTagAesthetics(tagId: TagID): ITagAesthetics {
     };
 }
 
+@replaceableComponent("views.rooms.RoomList")
 export default class RoomList extends React.PureComponent<IProps, IState> {
     private dispatcherRef;
     private customTagStoreRef;
+    private tagAesthetics: ITagAestheticsMap;
+    private roomStoreToken: fbEmitter.EventSubscription;
 
     constructor(props: IProps) {
         super(props);
@@ -185,21 +282,47 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
         this.state = {
             sublists: {},
             isNameFiltering: !!RoomListStore.instance.getFirstNameFilterCondition(),
+            suggestedRooms: SpaceStore.instance.suggestedRooms,
         };
 
+        // shallow-copy from the template as we need to make modifications to it
+        this.tagAesthetics = objectShallowClone(TAG_AESTHETICS);
+        this.updateDmAddRoomAction();
+
         this.dispatcherRef = defaultDispatcher.register(this.onAction);
+        this.roomStoreToken = RoomViewStore.addListener(this.onRoomViewStoreUpdate);
     }
 
     public componentDidMount(): void {
+        SpaceStore.instance.on(SUGGESTED_ROOMS, this.updateSuggestedRooms);
         RoomListStore.instance.on(LISTS_UPDATE_EVENT, this.updateLists);
         this.customTagStoreRef = CustomRoomTagStore.addListener(this.updateLists);
         this.updateLists(); // trigger the first update
     }
 
     public componentWillUnmount() {
+        SpaceStore.instance.off(SUGGESTED_ROOMS, this.updateSuggestedRooms);
         RoomListStore.instance.off(LISTS_UPDATE_EVENT, this.updateLists);
         defaultDispatcher.unregister(this.dispatcherRef);
         if (this.customTagStoreRef) this.customTagStoreRef.remove();
+        if (this.roomStoreToken) this.roomStoreToken.remove();
+    }
+
+    private onRoomViewStoreUpdate = () => {
+        this.setState({
+            currentRoomId: RoomViewStore.getRoomId(),
+        });
+    };
+
+    private updateDmAddRoomAction() {
+        const dmTagAesthetics = objectShallowClone(TAG_AESTHETICS[DefaultTagID.DM]);
+        if (CallHandler.sharedInstance().getSupportsPstnProtocol()) {
+            dmTagAesthetics.addRoomContextMenu = dmAddRoomContextMenu;
+        } else {
+            dmTagAesthetics.onAddRoom = dmOnAddRoom;
+        }
+
+        this.tagAesthetics[DefaultTagID.DM] = dmTagAesthetics;
     }
 
     private onAction = (payload: ActionPayload) => {
@@ -214,12 +337,15 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
                     show_room_tile: true, // to make sure the room gets scrolled into view
                 });
             }
+        } else if (payload.action === Action.PstnSupportUpdated) {
+            this.updateDmAddRoomAction();
+            this.updateLists();
         }
     };
 
     private getRoomDelta = (roomId: string, delta: number, unread = false) => {
         const lists = RoomListStore.instance.orderedLists;
-        const rooms: Room = [];
+        const rooms: Room[] = [];
         TAG_ORDER.forEach(t => {
             let listRooms = lists[t];
 
@@ -238,6 +364,10 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
         // use slice to account for looping around the start
         const [room] = rooms.slice((currentIndex + delta) % rooms.length);
         return room;
+    };
+
+    private updateSuggestedRooms = (suggestedRooms: ISpaceSummaryRoom[]) => {
+        this.setState({ suggestedRooms });
     };
 
     private updateLists = () => {
@@ -294,7 +424,44 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
         dis.dispatch({ action: Action.ViewRoomDirectory, initialText });
     };
 
-    private renderCommunityInvites(): TemporaryTile[] {
+    private renderSuggestedRooms(): ReactComponentElement<typeof ExtraTile>[] {
+        return this.state.suggestedRooms.map(room => {
+            const name = room.name || room.canonical_alias || room.aliases.pop() || _t("Empty room");
+            const avatar = (
+                <RoomAvatar
+                    oobData={{
+                        name,
+                        avatarUrl: room.avatar_url,
+                    }}
+                    width={32}
+                    height={32}
+                    resizeMethod="crop"
+                />
+            );
+            const viewRoom = () => {
+                defaultDispatcher.dispatch({
+                    action: "view_room",
+                    room_id: room.room_id,
+                    oobData: {
+                        avatarUrl: room.avatar_url,
+                        name,
+                    },
+                });
+            };
+            return (
+                <ExtraTile
+                    isMinimized={this.props.isMinimized}
+                    isSelected={this.state.currentRoomId === room.room_id}
+                    displayName={name}
+                    avatar={avatar}
+                    onClick={viewRoom}
+                    key={`suggestedRoomTile_${room.room_id}`}
+                />
+            );
+        });
+    }
+
+    private renderCommunityInvites(): ReactComponentElement<typeof ExtraTile>[] {
         // TODO: Put community invites in a more sensible place (not in the room list)
         // See https://github.com/vector-im/element-web/issues/14456
         return MatrixClientPeg.get().getGroups().filter(g => {
@@ -315,7 +482,7 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
                 });
             };
             return (
-                <TemporaryTile
+                <ExtraTile
                     isMinimized={this.props.isMinimized}
                     isSelected={false}
                     displayName={g.name}
@@ -347,7 +514,14 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
 
         for (const orderedTagId of tagOrder) {
             const orderedRooms = this.state.sublists[orderedTagId] || [];
-            const extraTiles = orderedTagId === DefaultTagID.Invite ? this.renderCommunityInvites() : null;
+
+            let extraTiles = null;
+            if (orderedTagId === DefaultTagID.Invite) {
+                extraTiles = this.renderCommunityInvites();
+            } else if (orderedTagId === DefaultTagID.Suggested) {
+                extraTiles = this.renderSuggestedRooms();
+            }
+
             const totalTiles = orderedRooms.length + (extraTiles ? extraTiles.length : 0);
             if (totalTiles === 0 && !ALWAYS_VISIBLE_TAGS.includes(orderedTagId)) {
                 continue; // skip tag - not needed
@@ -355,7 +529,7 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
 
             const aesthetics: ITagAesthetics = isCustomTag(orderedTagId)
                 ? customTagAesthetics(orderedTagId)
-                : TAG_AESTHETICS[orderedTagId];
+                : this.tagAesthetics[orderedTagId];
             if (!aesthetics) throw new Error(`Tag ${orderedTagId} does not have aesthetics`);
 
             components.push(<RoomSublist
@@ -370,7 +544,7 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
                 isMinimized={this.props.isMinimized}
                 onResize={this.props.onResize}
                 showSkeleton={showSkeleton}
-                extraBadTilesThatShouldntExist={extraTiles}
+                extraTiles={extraTiles}
             />);
         }
 
@@ -402,8 +576,9 @@ export default class RoomList extends React.PureComponent<IProps, IState> {
                 const unfilteredLists = RoomListStore.instance.unfilteredLists
                 const unfilteredRooms = unfilteredLists[DefaultTagID.Untagged] || [];
                 const unfilteredHistorical = unfilteredLists[DefaultTagID.Archived] || [];
+                const unfilteredFavourite = unfilteredLists[DefaultTagID.Favourite] || [];
                 // show a prompt to join/create rooms if the user is in 0 rooms and no historical
-                if (unfilteredRooms.length < 1 && unfilteredHistorical < 1) {
+                if (unfilteredRooms.length < 1 && unfilteredHistorical < 1 && unfilteredFavourite < 1) {
                     explorePrompt = <div className="mx_RoomList_explorePrompt">
                         <div>{_t("Use the + to make a new room or explore existing ones below")}</div>
                         <AccessibleButton
